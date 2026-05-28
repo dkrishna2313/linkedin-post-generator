@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String            @id @default(cuid())
+  email        String            @unique
+  name         String?
+  passwordHash String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  workspaces   WorkspaceMember[]
+}
+
+model Workspace {
+  id                  String               @id @default(cuid())
+  name                String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  members             WorkspaceMember[]
+  sources             Source[]
+  posts               Post[]
+  articles            Article[]
+  viewpoints          Viewpoint[]
+  sensitiveTopics     SensitiveTopic[]
+  voiceProfiles       VoiceProfile[]
+  generatedImages     GeneratedImage[]
+  providerCredentials ProviderCredential[]
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        String    @default("owner")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+}
+
+model Source {
+  id           String        @id @default(cuid())
+  workspaceId  String
+  type         String
+  title        String?
+  url          String?
+  author       String?
+  publication  String?
+  publishedAt  DateTime?
+  rawContent   String?
+  cleanContent String?
+  summary      String?
+  keyPoints    Json?
+  quotes       Json?
+  tags         String[]      @default([])
+  status       String        @default("queued")
+  error        String?
+  contentHash  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  chunks       SourceChunk[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, type])
+}
+
+model SourceChunk {
+  id         String                 @id @default(cuid())
+  sourceId   String
+  content    String
+  chunkIndex Int
+  tokenCount Int?
+  embedding  Unsupported("vector")?
+  source     Source                 @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, chunkIndex])
+}
+
+model Post {
+  id           String        @id @default(cuid())
+  workspaceId  String
+  status       String        @default("idea")
+  title        String?
+  body         String
+  hook         String?
+  hashtags     String[]      @default([])
+  firstComment String?
+  imageIdea    String?
+  angle        String?
+  sourceRefs   Json?
+  publishedAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions     PostVersion[]
+
+  @@index([workspaceId, status])
+}
+
+model PostVersion {
+  id        String   @id @default(cuid())
+  postId    String
+  body      String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model Article {
+  id          String    @id @default(cuid())
+  workspaceId String
+  status      String    @default("idea")
+  title       String?
+  subtitle    String?
+  outline     Json?
+  body        String?
+  sourceRefs  Json?
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+}
+
+model Viewpoint {
+  id                  String                 @id @default(cuid())
+  workspaceId          String
+  title                String
+  description          String
+  framing              String?
+  supportingArguments  Json?
+  counterArguments     Json?
+  priority             Int                    @default(0)
+  active               Boolean                @default(true)
+  embedding            Unsupported("vector")?
+  workspace            Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model SensitiveTopic {
+  id                String                 @id @default(cuid())
+  workspaceId        String
+  topic              String
+  guidance           String
+  phrasesToAvoid     String[]               @default([])
+  requiredCaveats    Json?
+  preferredLanguage  Json?
+  active             Boolean                @default(true)
+  embedding          Unsupported("vector")?
+  workspace          Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model VoiceProfile {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  summary     String
+  styleRules  Json
+  examples    Json?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model GeneratedImage {
+  id          String    @id @default(cuid())
+  workspaceId String
+  postId      String?
+  articleId   String?
+  provider    String
+  model       String?
+  prompt      String
+  imagePath   String
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model ProviderCredential {
+  id              String    @id @default(cuid())
+  workspaceId      String
+  provider         String
+  encryptedApiKey  String
+  keyPreview       String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider])
+}
