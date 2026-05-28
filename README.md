@@ -44,3 +44,4 @@ Generate a 32-byte base64 encryption key with:
 openssl rand -base64 32
 ```
 # linkedin-post-generator
+# linkedin-post-generator
