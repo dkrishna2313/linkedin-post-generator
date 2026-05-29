@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { ingestPublicUrl } from "@/lib/ingestion/url";
+import { summarizeSourceContent } from "@/lib/llm/source-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -16,13 +17,19 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   try {
     await prisma.source.update({ where: { id }, data: { status: "fetching", error: null } });
     const ingested = await ingestPublicUrl(source.url);
+    const summary = await summarizeSourceContent({
+      title: ingested.title ?? source.title,
+      url: source.url,
+      content: ingested.cleanContent,
+      fallbackSummary: ingested.summary
+    });
     const updated = await prisma.source.update({
       where: { id },
       data: {
         title: ingested.title ?? source.title,
         rawContent: ingested.rawContent,
         cleanContent: ingested.cleanContent,
-        summary: ingested.summary,
+        summary,
         contentHash: crypto.createHash("sha256").update(ingested.cleanContent).digest("hex"),
         status: "parsed",
         error: null

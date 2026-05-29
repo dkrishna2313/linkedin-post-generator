@@ -307,6 +307,25 @@ textarea {
   padding-bottom: 0;
 }
 
+.source-list-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.source-detail {
+  display: -webkit-box;
+  margin-bottom: 8px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.source-detail.expanded {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
 .draft-body {
   white-space: pre-wrap;
   color: #1f2937;

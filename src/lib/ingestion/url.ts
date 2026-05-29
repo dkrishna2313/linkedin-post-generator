@@ -36,7 +36,19 @@ export async function ingestPublicUrl(url: string): Promise<IngestedUrl> {
     cleanText($("meta[property='og:title']").attr("content") ?? "") ||
     cleanText($("title").first().text()) ||
     null;
-  const articleCandidate = $("article").first().text() || $("main").first().text() || $("body").text();
+  const articleRoot = $("article").first().length
+    ? $("article").first()
+    : $("main").first().length
+      ? $("main").first()
+      : $("body");
+  const paragraphText = articleRoot
+    .find("h1, h2, h3, p, li, blockquote")
+    .map((_, element) => $(element).text())
+    .get()
+    .map(cleanText)
+    .filter((text) => text.length > 40)
+    .join(" ");
+  const articleCandidate = paragraphText || articleRoot.text();
   const cleanContent = cleanText(articleCandidate).slice(0, 30000);
 
   if (cleanContent.length < 120) {

@@ -9,8 +9,11 @@ export const dynamic = "force-dynamic";
 
 const createSourceSchema = z.object({
   type: z.string().min(1),
+  title: z.string().trim().optional().default(""),
+  url: z.string().trim().optional().default(""),
   titleOrUrl: z.string().trim().optional().default(""),
   content: z.string().trim().optional().default(""),
+  summary: z.string().trim().optional().default(""),
   status: z.enum(["queued", "draft"]).default("queued")
 });
 
@@ -45,10 +48,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid source input." }, { status: 400 });
   }
 
-  const { type, titleOrUrl, content, status } = parsed.data;
-  const hasUrl = /^https?:\/\//i.test(titleOrUrl);
-  const title = hasUrl ? undefined : titleOrUrl || inferTitle(content);
-  const url = hasUrl ? titleOrUrl : undefined;
+  const { type, titleOrUrl, content, summary, status } = parsed.data;
+  const fallbackIsUrl = /^https?:\/\//i.test(titleOrUrl);
+  const title = parsed.data.title || (fallbackIsUrl ? undefined : titleOrUrl) || inferTitle(content);
+  const url = parsed.data.url || (fallbackIsUrl ? titleOrUrl : undefined);
 
   if (!title && !url && !content) {
     return NextResponse.json({ error: "Add a URL, title, or pasted text before saving." }, { status: 400 });
@@ -61,8 +64,8 @@ export async function POST(request: Request) {
       create: { id: defaultWorkspaceId, name: "Dilip LinkedIn Studio" }
     });
 
-    const cleanContent = content || titleOrUrl;
-    const contentHash = crypto.createHash("sha256").update(`${type}:${titleOrUrl}:${content}`).digest("hex");
+    const cleanContent = content;
+    const contentHash = crypto.createHash("sha256").update(`${type}:${title ?? ""}:${url ?? ""}:${content}`).digest("hex");
 
     const source = await prisma.source.create({
       data: {
@@ -71,11 +74,11 @@ export async function POST(request: Request) {
         title,
         url,
         rawContent: content || null,
-        cleanContent,
-        summary: cleanContent.slice(0, 280),
+        cleanContent: cleanContent || null,
+        summary: summary || cleanContent.slice(0, 280),
         status,
         contentHash,
-        tags: inferSourceTags(`${type} ${titleOrUrl} ${content}`)
+        tags: inferSourceTags(`${type} ${title ?? ""} ${url ?? ""} ${content}`)
       },
       select: {
         id: true,
