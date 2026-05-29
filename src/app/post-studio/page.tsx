@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Clipboard, Image as ImageIcon, RefreshCw, Save, Sparkles, Wand2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { postAngles, sensitiveTopics } from "@/lib/data/seed";
-import type { GeneratedDraft } from "@/lib/prompts/post";
+import type { EmojiUsage, GeneratedDraft } from "@/lib/prompts/post";
 
 type SourceListItem = {
   id: string;
@@ -13,6 +13,7 @@ type SourceListItem = {
   status: string;
   summary: string | null;
   cleanContent?: string | null;
+  articleContent?: string | null;
   url?: string | null;
   tags: string[];
 };
@@ -54,11 +55,12 @@ export default function PostStudioPage() {
   const [sources, setSources] = useState<SourceListItem[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState("");
   const [source, setSource] = useState("");
+  const [sourceNotes, setSourceNotes] = useState("");
   const [viewpoints, setViewpoints] = useState<ViewpointListItem[]>([]);
   const [angle, setAngle] = useState(postAngles[0]);
   const [viewpoint, setViewpoint] = useState("");
   const [sensitivity, setSensitivity] = useState(sensitiveTopics[0].guidance);
-  const [emojiUsage, setEmojiUsage] = useState<"none" | "light" | "moderate">("light");
+  const [emojiUsage, setEmojiUsage] = useState<EmojiUsage>("moderate");
   const [drafts, setDrafts] = useState<GeneratedDraft[]>([]);
   const [selected, setSelected] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -72,6 +74,7 @@ export default function PostStudioPage() {
   const [imagePromptResult, setImagePromptResult] = useState("");
   const [savedImageUrl, setSavedImageUrl] = useState("");
   const [imageMessage, setImageMessage] = useState("");
+  const [generationMessage, setGenerationMessage] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
   const activeDraft = drafts[selected];
 
@@ -91,6 +94,7 @@ export default function PostStudioPage() {
           const first = savedSources[0];
           setSelectedSourceId(first.id);
           setSource(sourceMaterial(first));
+          setSourceNotes(sourceNotesFromSource(first));
         }
       } catch {
         setSourceMessage("Could not load saved sources. You can still paste source material below.");
@@ -127,55 +131,62 @@ export default function PostStudioPage() {
     const nextSource = sources.find((item) => item.id === id);
     if (nextSource) {
       setSource(sourceMaterial(nextSource));
+      setSourceNotes(sourceNotesFromSource(nextSource));
     }
   }
 
   async function generateDrafts() {
     setLoading(true);
+    setGenerationMessage("");
     setDraftMessage("");
-    let sourceForGeneration = source;
-    const savedSource = sources.find((item) => item.id === selectedSourceId);
 
-    if (savedSource?.url) {
-      setSourceMessage("Reading and extracting the URL before generating drafts...");
-      const ingestionResponse = await fetch(`/api/sources/${savedSource.id}/ingest`, { method: "POST" });
-      const ingestionData = await ingestionResponse.json();
+    try {
+      let sourceForGeneration = source;
+      const savedSource = sources.find((item) => item.id === selectedSourceId);
 
-      if (!ingestionResponse.ok) {
-        setLoading(false);
-        setSourceMessage(`Could not read the URL: ${ingestionData.error ?? "Unknown error."}`);
-        return;
+      if (savedSource?.url) {
+        setSourceMessage("Reading and extracting the URL before generating drafts...");
+        const ingestionResponse = await fetchWithTimeout(`/api/sources/${savedSource.id}/ingest`, { method: "POST" });
+        const ingestionData = await readResponseJson(ingestionResponse);
+
+        if (!ingestionResponse.ok) {
+          throw new Error(`Could not read the URL: ${ingestionData.error ?? "Unknown error."}`);
+        }
+
+        const refreshedSource: SourceListItem = ingestionData.source;
+        setSources((current) => current.map((item) => (item.id === refreshedSource.id ? refreshedSource : item)));
+        sourceForGeneration = sourceMaterialForGeneration(refreshedSource);
+        setSource(sourceMaterial(refreshedSource));
+        setSourceMessage("URL read successfully. Drafts are based on the extracted article content.");
       }
 
-      const refreshedSource: SourceListItem = ingestionData.source;
-      setSources((current) => current.map((item) => (item.id === refreshedSource.id ? refreshedSource : item)));
-      sourceForGeneration = sourceMaterial(refreshedSource);
-      setSource(sourceForGeneration);
-      setSourceMessage("URL read successfully. Drafts are based on the extracted article content.");
-    }
+      const generationInput = sourceWithNotes(sourceForGeneration, sourceNotes);
 
-    const response = await fetch("/api/generate-post", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source: sourceForGeneration,
-        sourceReference: savedSource?.url,
-        angle,
-        viewpoint,
-        sensitivity,
-        emojiUsage,
-        count: 4
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) {
+      const response = await fetchWithTimeout("/api/generate-post", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: generationInput,
+          sourceReference: savedSource?.url,
+          angle,
+          viewpoint,
+          sensitivity,
+          emojiUsage,
+          count: 4
+        })
+      });
+      const data = await readResponseJson(response);
+      if (!response.ok) {
+        throw new Error(data.error ?? "Draft generation failed.");
+      }
+
+      setDrafts(data.drafts ?? []);
+      setSelected(0);
+    } catch (error) {
+      setGenerationMessage(errorMessage(error, "Draft generation failed."));
+    } finally {
       setLoading(false);
-      setDraftMessage(data.error ?? "Draft generation failed.");
-      return;
     }
-    setDrafts(data.drafts ?? []);
-    setSelected(0);
-    setLoading(false);
   }
 
   async function refineDraft(action: string) {
@@ -287,7 +298,9 @@ export default function PostStudioPage() {
           sensitiveTopicNotes: activeDraft.sensitive_topic_notes,
           toneNotes: activeDraft.tone_notes,
           confidenceScore: activeDraft.confidence_score,
-          generatedImagePath: savedImageUrl
+          generatedImagePath: savedImageUrl,
+          sourceMaterial: source,
+          sourceNotes
         }
       })
     });
@@ -315,6 +328,7 @@ export default function PostStudioPage() {
           </button>
         }
       />
+      {generationMessage ? <p className="notice error">{generationMessage}</p> : null}
 
       <section className="grid two">
         <div className="card grid">
@@ -338,7 +352,19 @@ export default function PostStudioPage() {
           ) : null}
           <label>
             Source material
-            <textarea value={source} onChange={(event) => setSource(event.target.value)} />
+            <textarea
+              placeholder="Article text, source summary, pasted source material, or extracted URL content."
+              value={source}
+              onChange={(event) => setSource(event.target.value)}
+            />
+          </label>
+          <label>
+            Notes
+            <textarea
+              placeholder="Optional notes for yourself, emphasis, caveats, or points to include. These stay separate from the source material."
+              value={sourceNotes}
+              onChange={(event) => setSourceNotes(event.target.value)}
+            />
           </label>
         </div>
 
@@ -366,11 +392,12 @@ export default function PostStudioPage() {
             Emoji use
             <select
               value={emojiUsage}
-              onChange={(event) => setEmojiUsage(event.target.value as "none" | "light" | "moderate")}
+              onChange={(event) => setEmojiUsage(event.target.value as EmojiUsage)}
             >
               <option value="none">None</option>
               <option value="light">Light</option>
               <option value="moderate">Moderate</option>
+              <option value="high">High</option>
             </select>
           </label>
           <label>
@@ -546,15 +573,72 @@ export default function PostStudioPage() {
 }
 
 function sourceLabel(source: SourceListItem) {
-  return source.title ?? source.url ?? source.summary?.slice(0, 80) ?? "Untitled source";
+  return truncateLabel(source.title ?? source.url ?? source.summary ?? "Untitled source");
 }
 
 function sourceMaterial(source: SourceListItem) {
   const parts = [
     source.title ? `Title: ${source.title}` : null,
-    source.summary ? `Summary: ${source.summary}` : null,
-    source.cleanContent ? `Source notes: ${source.cleanContent}` : null
+    source.summary ? `Summary: ${source.summary}` : null
   ].filter(Boolean);
 
   return parts.join("\n\n");
+}
+
+function sourceNotesFromSource(source: SourceListItem) {
+  return source.cleanContent ?? "";
+}
+
+function sourceMaterialForGeneration(source: SourceListItem) {
+  const parts = [
+    sourceMaterial(source),
+    source.articleContent ? `Article text:\n${source.articleContent}` : null
+  ].filter(Boolean);
+
+  return parts.join("\n\n");
+}
+
+function sourceWithNotes(source: string, notes: string) {
+  const trimmedSource = source.trim();
+  const trimmedNotes = notes.trim();
+
+  if (!trimmedNotes) {
+    return trimmedSource;
+  }
+
+  return [trimmedSource, `User notes:\n${trimmedNotes}`].filter(Boolean).join("\n\n");
+}
+
+function truncateLabel(label: string) {
+  return label.length > 90 ? `${label.slice(0, 87)}...` : label;
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 75000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function readResponseJson(response: Response) {
+  const text = await response.text();
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text.slice(0, 240) };
+  }
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "Draft generation timed out. Try again, or use a shorter source.";
+  }
+
+  return error instanceof Error ? error.message : fallback;
 }

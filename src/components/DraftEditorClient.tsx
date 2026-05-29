@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, RefreshCw, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Image as ImageIcon, RefreshCw, Save, Sparkles, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { postAngles } from "@/lib/data/seed";
 import type { GeneratedDraft } from "@/lib/prompts/post";
@@ -35,6 +35,15 @@ type DraftPost = {
 };
 
 const draftStatuses = ["idea", "researching", "draft", "edited", "ready_to_post", "published", "archived"];
+const imageStyles = [
+  "Abstract business visual",
+  "Simple conceptual illustration",
+  "LinkedIn banner-style image",
+  "Quote card",
+  "Carousel cover slide",
+  "Diagram/framework visual"
+];
+const aspectRatios = ["1:1", "4:5", "16:9", "1.91:1"];
 
 export function DraftEditorClient({ postId }: { postId: string }) {
   const [post, setPost] = useState<DraftPost | null>(null);
@@ -53,6 +62,12 @@ export function DraftEditorClient({ postId }: { postId: string }) {
   const [regenerationAngle, setRegenerationAngle] = useState(postAngles[0]);
   const [regeneratedDrafts, setRegeneratedDrafts] = useState<GeneratedDraft[]>([]);
   const [editorHighlighted, setEditorHighlighted] = useState(false);
+  const [imageStyle, setImageStyle] = useState(imageStyles[0]);
+  const [imageAspectRatio, setImageAspectRatio] = useState(aspectRatios[1]);
+  const [imageProvider, setImageProvider] = useState("gemini");
+  const [manualImagePrompt, setManualImagePrompt] = useState("");
+  const [imagePromptResult, setImagePromptResult] = useState("");
+  const [imageLoading, setImageLoading] = useState(false);
   const editorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -190,6 +205,89 @@ export function DraftEditorClient({ postId }: { postId: string }) {
     setMessage("Regenerated draft option removed.");
   }
 
+  async function generateImagePrompt() {
+    setImageLoading(true);
+    setMessageType("info");
+    setMessage("Generating image prompt...");
+
+    try {
+      const prompt = await createImagePrompt();
+      setImagePromptResult(prompt);
+      setMessageType("success");
+      setMessage("Image prompt generated. Review it below, then generate and attach the image.");
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Image prompt could not be generated.");
+    } finally {
+      setImageLoading(false);
+    }
+  }
+
+  async function generateAndAttachImage() {
+    setImageLoading(true);
+    setMessageType("info");
+    setMessage("Generating and attaching image. This can take a little while.");
+
+    try {
+      const prompt = imagePromptResult || (await createImagePrompt());
+      setImagePromptResult(prompt);
+
+      const response = await fetch("/api/generate-and-save-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          provider: imageProvider,
+          aspectRatio: imageAspectRatio,
+          postId
+        })
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Image could not be generated.");
+      }
+
+      setPost((current) =>
+        current
+          ? {
+              ...current,
+              images: [data.image, ...(current.images ?? [])]
+            }
+          : current
+      );
+      setMessageType("success");
+      setMessage("Image generated and attached to this draft.");
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Image could not be generated.");
+    } finally {
+      setImageLoading(false);
+    }
+  }
+
+  async function createImagePrompt() {
+    const response = await fetch("/api/generate-image-prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        postText: body,
+        imageIdea,
+        style: imageStyle,
+        aspectRatio: imageAspectRatio,
+        provider: imageProvider,
+        manualPrompt: manualImagePrompt
+      })
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error ?? "Image prompt could not be generated.");
+    }
+
+    return data.prompt as string;
+  }
+
   return (
     <div className="page">
       <PageHeader
@@ -322,6 +420,68 @@ export function DraftEditorClient({ postId }: { postId: string }) {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      </section>
+
+      <section className="card section-band">
+        <h2>Generate Image</h2>
+        <div className="grid two">
+          <div className="grid">
+            <label>
+              Image type
+              <select value={imageStyle} onChange={(event) => setImageStyle(event.target.value)}>
+                {imageStyles.map((style) => (
+                  <option key={style}>{style}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Aspect ratio
+              <select value={imageAspectRatio} onChange={(event) => setImageAspectRatio(event.target.value)}>
+                {aspectRatios.map((ratio) => (
+                  <option key={ratio}>{ratio}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Provider
+              <select value={imageProvider} onChange={(event) => setImageProvider(event.target.value)}>
+                <option value="gemini">Gemini</option>
+                <option value="openai">OpenAI</option>
+              </select>
+            </label>
+            <label>
+              Manual direction
+              <textarea
+                placeholder="Optional: add color, composition, visual metaphor, or text restrictions."
+                value={manualImagePrompt}
+                onChange={(event) => setManualImagePrompt(event.target.value)}
+              />
+            </label>
+            <div className="toolbar">
+              <button type="button" onClick={generateImagePrompt} disabled={imageLoading || !body.trim()}>
+                <Sparkles size={17} /> {imageLoading ? "Working..." : "Generate image prompt"}
+              </button>
+              <button className="primary" type="button" onClick={generateAndAttachImage} disabled={imageLoading || !body.trim()}>
+                <ImageIcon size={17} /> {imageLoading ? "Working..." : "Generate and attach image"}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid">
+            <label>
+              Image idea
+              <textarea value={imageIdea} onChange={(event) => setImageIdea(event.target.value)} />
+            </label>
+            <label>
+              Generated provider prompt
+              <textarea
+                value={imagePromptResult}
+                onChange={(event) => setImagePromptResult(event.target.value)}
+                placeholder="Generate a prompt, or write one here before generating the image."
+              />
+            </label>
           </div>
         </div>
       </section>

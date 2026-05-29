@@ -132,11 +132,18 @@ h3 {
 p {
   color: var(--muted);
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .grid {
   display: grid;
   gap: 16px;
+}
+
+.grid > *,
+.card,
+label {
+  min-width: 0;
 }
 
 .grid.two {
@@ -215,6 +222,7 @@ label {
 input,
 textarea,
 select {
+  min-width: 0;
   width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius);

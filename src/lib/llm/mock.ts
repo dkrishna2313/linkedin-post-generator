@@ -1,4 +1,4 @@
-import type { GeneratedDraft } from "@/lib/prompts/post";
+import type { EmojiUsage, GeneratedDraft } from "@/lib/prompts/post";
 import { enforceReferenceAtEnd } from "@/lib/llm/openai";
 
 const hashtagsByAngle: Record<string, string[]> = {
@@ -21,7 +21,7 @@ export function generateMockDrafts(input: {
   angle: string;
   viewpoint: string;
   sensitivity: string;
-  emojiUsage?: "none" | "light" | "moderate";
+  emojiUsage?: EmojiUsage;
   count?: number;
 }): GeneratedDraft[] {
   const count = Math.min(Math.max(input.count ?? 3, 1), 5);
@@ -31,8 +31,8 @@ export function generateMockDrafts(input: {
 
   return Array.from({ length: count }, (_, index) => {
     const accent = emojiAccent(index, emojiUsage);
-    const openingAccent = emojiUsage === "moderate" ? `${accent} ` : "";
-    const closingAccent = emojiUsage === "none" ? "" : ` ${accent}`;
+    const openingAccent = emojiUsage === "moderate" || emojiUsage === "high" ? `${accent} ` : "";
+    const closingAccent = emojiUsage === "none" ? "" : emojiUsage === "high" ? ` ${accent} 🚀 ✅` : ` ${accent}`;
 
     return enforceReferenceAtEnd({
     hook: `${openingAccent}${[
@@ -94,7 +94,7 @@ export function refineMockDraft(body: string, action: string) {
   };
 }
 
-function emojiAccent(index: number, usage: "none" | "light" | "moderate") {
+function emojiAccent(index: number, usage: EmojiUsage) {
   if (usage === "none") return "";
   return ["💡", "🔍", "⚖️", "🧠"][index % 4];
 }

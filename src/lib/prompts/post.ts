@@ -18,6 +18,7 @@ export const postGenerationSchema = z.object({
   drafts: z.array(generatedDraftSchema).min(1).max(5)
 });
 
+export type EmojiUsage = "none" | "light" | "moderate" | "high";
 export type GeneratedDraft = z.infer<typeof generatedDraftSchema>;
 
 export function buildPostPrompt(input: {
@@ -26,7 +27,7 @@ export function buildPostPrompt(input: {
   angle: string;
   viewpoint: string;
   sensitivity: string;
-  emojiUsage: "none" | "light" | "moderate";
+  emojiUsage: EmojiUsage;
   count: number;
 }) {
   return `Generate ${input.count} concise LinkedIn drafts.
@@ -34,9 +35,14 @@ export function buildPostPrompt(input: {
 Voice:
 - Short, punchy, practical, executive-friendly.
 - Avoid generic AI hype and corporate filler.
-- Emoji usage: ${input.emojiUsage}. Use at most 3 appropriate emojis and never decorative clutter.
+- Emoji usage: ${input.emojiUsage}. Never use decorative clutter.
+- If emoji usage is light, include 1 appropriate emoji in post_body.
+- If emoji usage is moderate, include 1 to 3 appropriate emojis across the hook and post_body, with at least 1 in post_body.
+- If emoji usage is high, include 3 to 5 appropriate emojis across the hook and post_body, with multiple emojis in post_body while keeping the writing professional.
+- If emoji usage is none, do not use emojis in the hook, post_body, first_comment, or image_idea.
 - Synthesize the source content; do not quote or repeat source metadata mechanically.
-- Include the source URL only once, as the final line of post_body in this format: Source: URL.
+- If a source URL is supplied, include it only once, as the final line of post_body in this format: Source: URL.
+- If no source URL is supplied, do not add a Source line.
 - Never place a URL in the hook or in the middle of post_body.
 
 Angle: ${input.angle}
@@ -50,5 +56,5 @@ ${input.source}
 Return strict JSON with a "drafts" array. Each draft must contain:
 hook, post_body, hashtags (3 to 5 items), first_comment, image_idea, angle,
 viewpoint_used, sensitive_topic_notes, source_references, tone_notes, confidence_score.
-If a source URL is supplied, set source_references to that URL and end post_body with its Source line.`;
+source_references must always be an array of strings. If a source URL is supplied, set source_references to an array containing that URL and end post_body with its Source line. If no source URL is supplied, source_references must be an empty array.`;
 }

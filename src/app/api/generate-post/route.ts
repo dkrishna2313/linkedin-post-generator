@@ -10,7 +10,7 @@ const requestSchema = z.object({
   angle: z.string(),
   viewpoint: z.string(),
   sensitivity: z.string(),
-  emojiUsage: z.enum(["none", "light", "moderate"]).default("light"),
+  emojiUsage: z.enum(["none", "light", "moderate", "high"]).default("moderate"),
   count: z.number().int().min(1).max(5).default(3)
 });
 

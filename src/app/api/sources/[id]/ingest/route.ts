@@ -28,7 +28,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       data: {
         title: ingested.title ?? source.title,
         rawContent: ingested.rawContent,
-        cleanContent: ingested.cleanContent,
         summary,
         contentHash: crypto.createHash("sha256").update(ingested.cleanContent).digest("hex"),
         status: "parsed",
@@ -46,7 +45,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       }
     });
 
-    return NextResponse.json({ source: updated });
+    return NextResponse.json({ source: { ...updated, articleContent: ingested.cleanContent } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "URL ingestion failed.";
     await prisma.source.update({ where: { id }, data: { status: "failed", error: message } });
