@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Image as ImageIcon, RefreshCw, Save, Sparkles, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Clipboard,
+  Download,
+  Image as ImageIcon,
+  RefreshCw,
+  Save,
+  Send,
+  Sparkles,
+  Trash2,
+  X
+} from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { postAngles } from "@/lib/data/seed";
 import type { GeneratedDraft } from "@/lib/prompts/post";
@@ -68,7 +79,14 @@ export function DraftEditorClient({ postId }: { postId: string }) {
   const [manualImagePrompt, setManualImagePrompt] = useState("");
   const [imagePromptResult, setImagePromptResult] = useState("");
   const [imageLoading, setImageLoading] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishMessage, setPublishMessage] = useState("");
+  const [selectedPublishImageId, setSelectedPublishImageId] = useState("");
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const publishImages = post?.images ?? [];
+  const selectedPublishImage =
+    publishImages.find((image) => image.id === selectedPublishImageId) ?? publishImages[0] ?? null;
+  const finalPostText = buildFinalPostText({ hook, body, hashtags });
 
   useEffect(() => {
     async function loadDraft() {
@@ -91,6 +109,7 @@ export function DraftEditorClient({ postId }: { postId: string }) {
       setImageIdea(loaded.imageIdea ?? "");
       setAngle(loaded.angle ?? "");
       setStatus(loaded.status);
+      setSelectedPublishImageId(loaded.images[0]?.id ?? "");
     }
 
     loadDraft();
@@ -256,6 +275,7 @@ export function DraftEditorClient({ postId }: { postId: string }) {
             }
           : current
       );
+      setSelectedPublishImageId(data.image.id);
       setMessageType("success");
       setMessage("Image generated and attached to this draft.");
     } catch (error) {
@@ -288,6 +308,11 @@ export function DraftEditorClient({ postId }: { postId: string }) {
     return data.prompt as string;
   }
 
+  async function copyFinalPost() {
+    await navigator.clipboard.writeText(finalPostText);
+    setPublishMessage("Post copied. Paste it into LinkedIn when you are ready.");
+  }
+
   return (
     <div className="page">
       <PageHeader
@@ -299,6 +324,9 @@ export function DraftEditorClient({ postId }: { postId: string }) {
             <Link className="button" href="/dashboard">
               <ArrowLeft size={17} /> Dashboard
             </Link>
+            <button type="button" onClick={() => setPublishOpen(true)} disabled={!body.trim()}>
+              <Send size={17} /> Publish
+            </button>
             <button className="primary" onClick={saveChanges} disabled={loading || !body.trim()}>
               <Save size={17} /> {loading ? "Saving..." : "Save changes"}
             </button>
@@ -523,6 +551,85 @@ export function DraftEditorClient({ postId }: { postId: string }) {
           )}
         </div>
       </section>
+
+      {publishOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="publish-title">
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Publish</p>
+                <h2 id="publish-title">Ready to publish</h2>
+              </div>
+              <button className="icon" type="button" title="Close publish preview" onClick={() => setPublishOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid two">
+              <div className="grid">
+                <label>
+                  Final LinkedIn post
+                  <textarea className="publish-preview" value={finalPostText} readOnly />
+                </label>
+                <div className="toolbar">
+                  <button className="primary" type="button" onClick={copyFinalPost}>
+                    <Clipboard size={17} /> Copy post
+                  </button>
+                  {selectedPublishImage ? (
+                    <a className="button" href={selectedPublishImage.imagePath} download>
+                      <Download size={17} /> Download image
+                    </a>
+                  ) : (
+                    <button type="button" disabled>
+                      <Download size={17} /> No image to download
+                    </button>
+                  )}
+                </div>
+                {publishMessage ? <p>{publishMessage}</p> : null}
+              </div>
+
+              <div className="grid">
+                {publishImages.length > 0 ? (
+                  <>
+                    <label>
+                      Image
+                      <select
+                        value={selectedPublishImage?.id ?? ""}
+                        onChange={(event) => setSelectedPublishImageId(event.target.value)}
+                      >
+                        {publishImages.map((image, index) => (
+                          <option key={image.id} value={image.id}>
+                            {`Image ${index + 1} - ${image.provider}${image.model ? ` (${image.model})` : ""}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {selectedPublishImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        alt="Selected publish visual"
+                        src={selectedPublishImage.imagePath}
+                        className="publish-image-preview"
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <p>No image is attached to this draft yet. Use Generate Image if you want a visual with the post.</p>
+                )}
+                {firstComment ? (
+                  <p>
+                    <strong>First comment:</strong> {firstComment}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function buildFinalPostText(input: { hook: string; body: string; hashtags: string }) {
+  return [input.hook, input.body, input.hashtags].map((part) => part.trim()).filter(Boolean).join("\n\n");
 }

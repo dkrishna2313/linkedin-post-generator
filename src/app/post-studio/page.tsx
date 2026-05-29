@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clipboard, Image as ImageIcon, RefreshCw, Save, Sparkles, Wand2 } from "lucide-react";
+import {
+  Clipboard,
+  Download,
+  Image as ImageIcon,
+  RefreshCw,
+  Save,
+  Send,
+  Sparkles,
+  Wand2,
+  X
+} from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { postAngles, sensitiveTopics } from "@/lib/data/seed";
 import type { EmojiUsage, GeneratedDraft } from "@/lib/prompts/post";
@@ -76,7 +86,10 @@ export default function PostStudioPage() {
   const [imageMessage, setImageMessage] = useState("");
   const [generationMessage, setGenerationMessage] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishMessage, setPublishMessage] = useState("");
   const activeDraft = drafts[selected];
+  const finalPostText = activeDraft ? buildFinalPostText(activeDraft) : "";
 
   useEffect(() => {
     async function loadSources() {
@@ -316,6 +329,13 @@ export default function PostStudioPage() {
     setDraftMessage(`Draft saved: ${data.post.title}`);
   }
 
+  async function copyFinalPost() {
+    if (!finalPostText) return;
+
+    await navigator.clipboard.writeText(finalPostText);
+    setPublishMessage("Post copied. Paste it into LinkedIn when you are ready.");
+  }
+
   return (
     <div className="page">
       <PageHeader
@@ -471,6 +491,9 @@ export default function PostStudioPage() {
                 <button className="primary" type="button" onClick={saveDraft} disabled={loading}>
                   <Save size={17} /> {loading ? "Saving..." : "Save draft"}
                 </button>
+                <button type="button" onClick={() => setPublishOpen(true)}>
+                  <Send size={17} /> Publish
+                </button>
                 <button type="button" onClick={() => setImagePanelOpen((current) => !current)}>
                   <ImageIcon size={17} /> {imagePanelOpen ? "Hide image panel" : "Image panel"}
                 </button>
@@ -568,6 +591,61 @@ export default function PostStudioPage() {
           ))}
         </div>
       </section>
+
+      {publishOpen && activeDraft ? (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="publish-title">
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Publish</p>
+                <h2 id="publish-title">Ready to publish</h2>
+              </div>
+              <button className="icon" type="button" title="Close publish preview" onClick={() => setPublishOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid two">
+              <div className="grid">
+                <label>
+                  Final LinkedIn post
+                  <textarea className="publish-preview" value={finalPostText} readOnly />
+                </label>
+                <div className="toolbar">
+                  <button className="primary" type="button" onClick={copyFinalPost}>
+                    <Clipboard size={17} /> Copy post
+                  </button>
+                  {savedImageUrl ? (
+                    <a className="button" href={savedImageUrl} download>
+                      <Download size={17} /> Download image
+                    </a>
+                  ) : (
+                    <button type="button" disabled>
+                      <Download size={17} /> No image to download
+                    </button>
+                  )}
+                </div>
+                {publishMessage ? <p>{publishMessage}</p> : null}
+              </div>
+
+              <div className="grid">
+                {savedImageUrl ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img alt="Selected publish visual" src={savedImageUrl} className="publish-image-preview" />
+                    <p>This generated image will download separately for upload to LinkedIn.</p>
+                  </>
+                ) : (
+                  <p>No image has been generated for this draft yet. Use the image panel if you want a visual with the post.</p>
+                )}
+                <p>
+                  <strong>First comment:</strong> {activeDraft.first_comment}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -611,6 +689,16 @@ function sourceWithNotes(source: string, notes: string) {
 
 function truncateLabel(label: string) {
   return label.length > 90 ? `${label.slice(0, 87)}...` : label;
+}
+
+function buildFinalPostText(draft: GeneratedDraft) {
+  const parts = [
+    draft.hook,
+    draft.post_body,
+    draft.hashtags.length > 0 ? draft.hashtags.join(" ") : null
+  ].filter(Boolean);
+
+  return parts.join("\n\n");
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 75000) {
