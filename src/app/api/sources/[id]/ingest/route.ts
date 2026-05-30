@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { ingestPublicUrl } from "@/lib/ingestion/url";
-import { summarizeSourceContent } from "@/lib/llm/source-summary";
+import { generateSourceKeyThemes, summarizeSourceContent } from "@/lib/llm/source-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +23,19 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       content: ingested.cleanContent,
       fallbackSummary: ingested.summary
     });
+    const keyThemes = await generateSourceKeyThemes({
+      title: ingested.title ?? source.title,
+      url: source.url,
+      content: ingested.cleanContent,
+      fallbackSummary: ingested.summary
+    });
     const updated = await prisma.source.update({
       where: { id },
       data: {
         title: ingested.title ?? source.title,
         rawContent: ingested.rawContent,
         summary,
+        keyPoints: { keyThemes },
         contentHash: crypto.createHash("sha256").update(ingested.cleanContent).digest("hex"),
         status: "parsed",
         error: null
@@ -39,6 +46,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         type: true,
         status: true,
         summary: true,
+        keyPoints: true,
         cleanContent: true,
         url: true,
         tags: true

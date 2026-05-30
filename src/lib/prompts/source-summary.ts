@@ -16,3 +16,20 @@ URL: ${input.url || "Unknown"}
 Extracted page text:
 ${input.content.slice(0, 24000)}`;
 }
+
+export function buildSourceKeyThemesPrompt(input: { title?: string | null; url?: string; content: string }) {
+  return `Identify the key themes from the actual article content below for later LinkedIn post generation.
+
+Rules:
+- Ignore surrounding website chrome: navigation, menus, cookie banners, ads, newsletter prompts, related links, sidebars, footers, captions, share buttons, author bios, and legal boilerplate.
+- Focus only on the article's substantive themes, tensions, implications, and repeated ideas.
+- Return 5-8 concise bullet points.
+- Each bullet should be a theme, not a full summary.
+- Do not include markdown tables.
+
+Title: ${input.title || "Unknown"}
+URL: ${input.url || "Unknown"}
+
+Extracted page text:
+${input.content.slice(0, 24000)}`;
+}

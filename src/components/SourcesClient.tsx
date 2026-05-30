@@ -10,6 +10,7 @@ type SourceListItem = {
   type: string;
   status: string;
   summary: string | null;
+  keyPoints?: unknown;
   cleanContent?: string | null;
   url?: string | null;
   tags: string[];
@@ -30,6 +31,7 @@ export function SourcesClient() {
   const [newTitle, setNewTitle] = useState("");
   const [newUrl, setNewUrl] = useState("");
   const [summary, setSummary] = useState("");
+  const [keyThemes, setKeyThemes] = useState("");
   const [content, setContent] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -43,6 +45,7 @@ export function SourcesClient() {
     url: "",
     cleanContent: "",
     summary: "",
+    keyThemes: "",
     status: "queued",
     tags: ""
   });
@@ -67,6 +70,7 @@ export function SourcesClient() {
         !query ||
         source.title?.toLowerCase().includes(query) ||
         source.summary?.toLowerCase().includes(query) ||
+        keyThemesFromSource(source).toLowerCase().includes(query) ||
         source.cleanContent?.toLowerCase().includes(query) ||
         source.tags.some((tag) => tag.toLowerCase().includes(query));
       const matchesStatus = statusFilter === "All" || source.status === statusFilter;
@@ -87,6 +91,7 @@ export function SourcesClient() {
         url: newUrl,
         content,
         summary,
+        keyThemes,
         status
       })
     });
@@ -102,6 +107,7 @@ export function SourcesClient() {
     setNewTitle("");
     setNewUrl("");
     setSummary("");
+    setKeyThemes("");
     setContent("");
     setMessage(status === "queued" ? "Source queued." : "Source saved as draft.");
     await loadSources();
@@ -138,6 +144,7 @@ export function SourcesClient() {
     setNewUrl(url);
     setNewTitle((current) => current || data.source.title || "");
     setSummary(data.source.summary);
+    setKeyThemes(data.source.keyThemes ?? "");
     setMessage("Summary created. You can edit it before saving the source.");
   }
 
@@ -149,6 +156,7 @@ export function SourcesClient() {
       url: source.url ?? "",
       cleanContent: source.cleanContent ?? "",
       summary: source.summary ?? "",
+      keyThemes: keyThemesFromSource(source),
       status: source.status,
       tags: source.tags.join(", ")
     });
@@ -169,6 +177,7 @@ export function SourcesClient() {
         url: editDraft.url,
         cleanContent: editDraft.cleanContent,
         summary: editDraft.summary,
+        keyThemes: editDraft.keyThemes,
         status: editDraft.status,
         tags: editDraft.tags
           .split(",")
@@ -217,6 +226,7 @@ export function SourcesClient() {
       ...current,
       title: data.source.title ?? current.title,
       summary: data.source.summary,
+      keyThemes: data.source.keyThemes ?? current.keyThemes,
       status: "summarized"
     }));
     setMessage("Summary created. Click Save source to persist it.");
@@ -316,6 +326,14 @@ export function SourcesClient() {
             />
           </label>
           <label>
+            Key Themes
+            <textarea
+              placeholder="Key themes will appear here after URL summarization, or you can write them manually."
+              value={keyThemes}
+              onChange={(event) => setKeyThemes(event.target.value)}
+            />
+          </label>
+          <label>
             Pasted text or notes
             <textarea
               placeholder="Add your own notes about this source. URL summarization will not overwrite this field."
@@ -377,7 +395,8 @@ export function SourcesClient() {
           ) : (
             filteredSources.map((source) => {
               const expanded = expandedSources.has(source.id);
-              const hasDetails = Boolean(source.summary || source.cleanContent);
+              const sourceKeyThemes = keyThemesFromSource(source);
+              const hasDetails = Boolean(source.summary || sourceKeyThemes || source.cleanContent);
 
               return (
               <div className="list-item" key={source.id}>
@@ -416,6 +435,13 @@ export function SourcesClient() {
                       <textarea
                         value={editDraft.summary}
                         onChange={(event) => setEditDraft((current) => ({ ...current, summary: event.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      Key Themes
+                      <textarea
+                        value={editDraft.keyThemes}
+                        onChange={(event) => setEditDraft((current) => ({ ...current, keyThemes: event.target.value }))}
                       />
                     </label>
                     <label>
@@ -466,6 +492,11 @@ export function SourcesClient() {
                       <p className={expanded ? "source-detail expanded" : "source-detail"}>
                         {source.summary ?? "No summary yet."}
                       </p>
+                      {sourceKeyThemes ? (
+                        <p className={expanded ? "source-detail expanded" : "source-detail"}>
+                          <strong>Key Themes:</strong> {sourceKeyThemes}
+                        </p>
+                      ) : null}
                       {source.cleanContent ? (
                         <p className={expanded ? "source-detail expanded" : "source-detail"}>
                           <strong>Notes:</strong> {source.cleanContent}
@@ -519,4 +550,27 @@ function extractUrl(value: string) {
   } catch {
     return "";
   }
+}
+
+function keyThemesFromSource(source: SourceListItem) {
+  const keyPoints = source.keyPoints;
+
+  if (!keyPoints) {
+    return "";
+  }
+
+  if (typeof keyPoints === "string") {
+    return keyPoints;
+  }
+
+  if (typeof keyPoints === "object" && "keyThemes" in keyPoints) {
+    const value = (keyPoints as { keyThemes?: unknown }).keyThemes;
+    if (Array.isArray(value)) {
+      return value.map(String).join("\n");
+    }
+
+    return typeof value === "string" ? value : "";
+  }
+
+  return "";
 }

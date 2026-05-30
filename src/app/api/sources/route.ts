@@ -14,6 +14,7 @@ const createSourceSchema = z.object({
   titleOrUrl: z.string().trim().optional().default(""),
   content: z.string().trim().optional().default(""),
   summary: z.string().trim().optional().default(""),
+  keyThemes: z.string().trim().optional().default(""),
   status: z.enum(["queued", "draft"]).default("queued")
 });
 
@@ -28,6 +29,7 @@ export async function GET() {
         type: true,
         status: true,
         summary: true,
+        keyPoints: true,
         cleanContent: true,
         url: true,
         tags: true
@@ -48,7 +50,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid source input." }, { status: 400 });
   }
 
-  const { type, titleOrUrl, content, summary, status } = parsed.data;
+  const { type, titleOrUrl, content, summary, keyThemes, status } = parsed.data;
   const fallbackIsUrl = /^https?:\/\//i.test(titleOrUrl);
   const title = parsed.data.title || (fallbackIsUrl ? undefined : titleOrUrl) || inferTitle(content);
   const url = parsed.data.url || (fallbackIsUrl ? titleOrUrl : undefined);
@@ -76,6 +78,7 @@ export async function POST(request: Request) {
         rawContent: content || null,
         cleanContent: cleanContent || null,
         summary: summary || cleanContent.slice(0, 280),
+        keyPoints: keyThemes ? { keyThemes } : undefined,
         status,
         contentHash,
         tags: inferSourceTags(`${type} ${title ?? ""} ${url ?? ""} ${content}`)
@@ -86,6 +89,7 @@ export async function POST(request: Request) {
         type: true,
         status: true,
         summary: true,
+        keyPoints: true,
         cleanContent: true,
         url: true,
         tags: true

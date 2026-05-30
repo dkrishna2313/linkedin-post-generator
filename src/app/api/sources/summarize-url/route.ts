@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ingestPublicUrl } from "@/lib/ingestion/url";
-import { summarizeSourceContent } from "@/lib/llm/source-summary";
+import { generateSourceKeyThemes, summarizeSourceContent } from "@/lib/llm/source-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,13 @@ export async function POST(request: Request) {
       content: ingested.cleanContent,
       fallbackSummary: ingested.summary
     });
-    return NextResponse.json({ source: { ...ingested, summary } });
+    const keyThemes = await generateSourceKeyThemes({
+      title: ingested.title,
+      url: parsed.data.url,
+      content: ingested.cleanContent,
+      fallbackSummary: ingested.summary
+    });
+    return NextResponse.json({ source: { ...ingested, summary, keyThemes } });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "URL could not be summarized." },

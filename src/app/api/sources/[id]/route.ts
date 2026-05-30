@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { inferSourceTags, inferSourceTitle } from "@/lib/sources/helpers";
@@ -12,6 +13,7 @@ const updateSourceSchema = z.object({
   url: z.string().trim().optional(),
   cleanContent: z.string().trim().optional(),
   summary: z.string().trim().optional(),
+  keyThemes: z.string().trim().optional(),
   status: z.string().trim().min(1).optional(),
   tags: z.array(z.string()).optional()
 });
@@ -40,6 +42,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         cleanContent: input.cleanContent,
         rawContent: input.cleanContent,
         summary: input.summary ?? (input.cleanContent ? input.cleanContent.slice(0, 280) : undefined),
+        keyPoints:
+          input.keyThemes === undefined ? undefined : input.keyThemes ? { keyThemes: input.keyThemes } : Prisma.JsonNull,
         status: input.status,
         tags,
         contentHash: input.cleanContent
@@ -52,6 +56,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         type: true,
         status: true,
         summary: true,
+        keyPoints: true,
         cleanContent: true,
         url: true,
         tags: true

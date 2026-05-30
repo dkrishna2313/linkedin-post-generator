@@ -22,6 +22,7 @@ type SourceListItem = {
   type: string;
   status: string;
   summary: string | null;
+  keyPoints?: unknown;
   cleanContent?: string | null;
   articleContent?: string | null;
   url?: string | null;
@@ -291,6 +292,7 @@ export default function PostStudioPage() {
 
     setLoading(true);
     setDraftMessage("");
+    const savedSource = sources.find((item) => item.id === selectedSourceId);
 
     const response = await fetch("/api/posts", {
       method: "POST",
@@ -304,7 +306,7 @@ export default function PostStudioPage() {
         firstComment: activeDraft.first_comment,
         imageIdea: activeDraft.image_idea,
         angle: activeDraft.angle,
-        sourceRefs: activeDraft.source_references,
+        sourceRefs: sourceReferencesForDraft(activeDraft, savedSource),
         generatedImagePath: savedImageUrl,
         metadata: {
           viewpointUsed: activeDraft.viewpoint_used,
@@ -657,7 +659,8 @@ function sourceLabel(source: SourceListItem) {
 function sourceMaterial(source: SourceListItem) {
   const parts = [
     source.title ? `Title: ${source.title}` : null,
-    source.summary ? `Summary: ${source.summary}` : null
+    source.summary ? `Summary: ${source.summary}` : null,
+    keyThemesFromSource(source) ? `Key themes:\n${keyThemesFromSource(source)}` : null
   ].filter(Boolean);
 
   return parts.join("\n\n");
@@ -689,6 +692,41 @@ function sourceWithNotes(source: string, notes: string) {
 
 function truncateLabel(label: string) {
   return label.length > 90 ? `${label.slice(0, 87)}...` : label;
+}
+
+function keyThemesFromSource(source: SourceListItem) {
+  const keyPoints = source.keyPoints;
+
+  if (!keyPoints) {
+    return "";
+  }
+
+  if (typeof keyPoints === "string") {
+    return keyPoints;
+  }
+
+  if (typeof keyPoints === "object" && "keyThemes" in keyPoints) {
+    const value = (keyPoints as { keyThemes?: unknown }).keyThemes;
+    if (Array.isArray(value)) {
+      return value.map(String).join("\n");
+    }
+
+    return typeof value === "string" ? value : "";
+  }
+
+  return "";
+}
+
+function sourceReferencesForDraft(draft: GeneratedDraft, source?: SourceListItem) {
+  return Array.from(
+    new Set(
+      [
+        source ? sourceLabel(source) : null,
+        source?.url ?? null,
+        ...draft.source_references
+      ].filter((reference): reference is string => Boolean(reference?.trim()))
+    )
+  );
 }
 
 function buildFinalPostText(draft: GeneratedDraft) {

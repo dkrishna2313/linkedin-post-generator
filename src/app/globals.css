@@ -395,6 +395,42 @@ textarea {
   align-items: start;
 }
 
+.redraft-layout {
+  align-items: start;
+}
+
+.redraft-controls {
+  align-content: start;
+  align-items: start;
+}
+
+.redraft-controls > * {
+  align-self: start;
+  width: 100%;
+}
+
+.redraft-content {
+  min-height: 180px;
+}
+
+.regenerated-draft-preview {
+  min-width: 0;
+}
+
+.regenerated-draft-body {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.regenerated-draft-preview:hover .regenerated-draft-body {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

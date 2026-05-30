@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { postAngles } from "@/lib/data/seed";
-import type { GeneratedDraft } from "@/lib/prompts/post";
+import type { EmojiUsage, GeneratedDraft } from "@/lib/prompts/post";
 
 type DraftPost = {
   id: string;
@@ -55,6 +55,8 @@ const imageStyles = [
   "Diagram/framework visual"
 ];
 const aspectRatios = ["1:1", "4:5", "16:9", "1.91:1"];
+const postLengths = ["Short", "Medium", "Long"] as const;
+const emojiIntensities = ["None", "Light", "Medium", "Heavy"] as const;
 
 export function DraftEditorClient({ postId }: { postId: string }) {
   const [post, setPost] = useState<DraftPost | null>(null);
@@ -69,8 +71,10 @@ export function DraftEditorClient({ postId }: { postId: string }) {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | "info">("info");
   const [loading, setLoading] = useState(false);
-  const [regenerationContext, setRegenerationContext] = useState("");
+  const [redraftContent, setRedraftContent] = useState("");
   const [regenerationAngle, setRegenerationAngle] = useState(postAngles[0]);
+  const [postLength, setPostLength] = useState<(typeof postLengths)[number]>("Medium");
+  const [emojiIntensity, setEmojiIntensity] = useState<(typeof emojiIntensities)[number]>("Light");
   const [regeneratedDrafts, setRegeneratedDrafts] = useState<GeneratedDraft[]>([]);
   const [editorHighlighted, setEditorHighlighted] = useState(false);
   const [imageStyle, setImageStyle] = useState(imageStyles[0]);
@@ -164,26 +168,28 @@ export function DraftEditorClient({ postId }: { postId: string }) {
   async function regenerateDraft() {
     setLoading(true);
     setMessageType("info");
-    setMessage("Generating alternate drafts...");
+    setMessage("Redrafting post...");
 
     const response = await fetch("/api/generate-post", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         source: [
-          "Current saved draft:",
-          body,
-          firstComment ? `First comment: ${firstComment}` : "",
-          imageIdea ? `Image idea: ${imageIdea}` : "",
-          regenerationContext ? `Regeneration direction: ${regenerationContext}` : ""
+          "Use the following redraft content as the complete source text for the new LinkedIn post.",
+          "Do not use the existing saved draft as source material.",
+          "Redraft content:",
+          redraftContent,
+          `Target post length: ${postLength} (${postLengthGuidance(postLength)})`,
+          `Emoji intensity: ${emojiIntensity}`
         ]
           .filter(Boolean)
           .join("\n\n"),
         angle: regenerationAngle,
         sourceReference: post?.sourceRefs?.find((reference) => /^https?:\/\//i.test(reference)),
-        viewpoint: "Preserve the current draft's core point of view unless the regeneration direction says otherwise.",
-        sensitivity: "Preserve nuance, avoid hype, and keep the draft suitable for LinkedIn.",
-        emojiUsage: "light",
+        viewpoint:
+          "Redraft the supplied Redraft content into a new LinkedIn post. Treat that text as the source of truth and preserve its main points.",
+        sensitivity: `Preserve nuance, avoid hype, and keep the draft suitable for LinkedIn. ${postLengthGuidance(postLength)} Match emoji intensity: ${emojiIntensity}.`,
+        emojiUsage: emojiUsageForIntensity(emojiIntensity),
         count: 3
       })
     });
@@ -199,7 +205,7 @@ export function DraftEditorClient({ postId }: { postId: string }) {
 
     setRegeneratedDrafts(data.drafts ?? []);
     setMessageType("success");
-    setMessage("Generated alternate drafts. Choose one below to replace the current editor content.");
+    setMessage("Generated redrafted options. Choose one below to replace the current editor content.");
   }
 
   function applyRegeneratedDraft(draft: GeneratedDraft) {
@@ -286,6 +292,44 @@ export function DraftEditorClient({ postId }: { postId: string }) {
     }
   }
 
+  async function deleteSavedImage(id: string) {
+    const confirmed = window.confirm("Delete this generated image? This cannot be undone.");
+    if (!confirmed) return;
+
+    setImageLoading(true);
+    setMessageType("info");
+    setMessage("Deleting image...");
+
+    try {
+      const response = await fetch(`/api/generated-images/${id}`, { method: "DELETE" });
+      const data = await readJsonResponse(response);
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Image could not be deleted.");
+      }
+
+      setPost((current) =>
+        current
+          ? {
+              ...current,
+              images: current.images.filter((image) => image.id !== id)
+            }
+          : current
+      );
+      if (selectedPublishImageId === id) {
+        const nextImage = post?.images.find((image) => image.id !== id);
+        setSelectedPublishImageId(nextImage?.id ?? "");
+      }
+      setMessageType("success");
+      setMessage("Image deleted.");
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Image could not be deleted.");
+    } finally {
+      setImageLoading(false);
+    }
+  }
+
   async function createImagePrompt() {
     const response = await fetch("/api/generate-image-prompt", {
       method: "POST",
@@ -365,21 +409,29 @@ export function DraftEditorClient({ postId }: { postId: string }) {
           </label>
         </div>
 
-        <div className="card grid draft-support-panel">
-          <h2>Supporting Fields</h2>
-          <label>
-            First comment
-            <textarea value={firstComment} onChange={(event) => setFirstComment(event.target.value)} />
-          </label>
-          <label>
-            Image idea
-            <textarea value={imageIdea} onChange={(event) => setImageIdea(event.target.value)} />
-          </label>
-          <label>
-            Angle
-            <input value={angle} onChange={(event) => setAngle(event.target.value)} />
-          </label>
+        <div className="card grid">
+          <h2>Sources Used</h2>
+          {post?.sourceRefs?.length ? (
+            <div className="list">
+              {post.sourceRefs.map((sourceRef, index) => (
+                <div className="list-item" key={`${sourceRef}-${index}`}>
+                  <div className="source-list-content">
+                    {isUrl(sourceRef) ? (
+                      <a href={sourceRef} target="_blank" rel="noreferrer">
+                        {sourceRef}
+                      </a>
+                    ) : (
+                      <p>{sourceRef}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p>No source references were saved with this draft.</p>
+          )}
         </div>
+
       </section>
 
       <section className="card section-band">
@@ -391,8 +443,8 @@ export function DraftEditorClient({ postId }: { postId: string }) {
             </button>
           </div>
         ) : null}
-        <div className="grid two">
-          <div className="grid">
+        <div className="grid two redraft-layout">
+          <div className="grid redraft-controls">
             <label>
               Regeneration angle
               <select value={regenerationAngle} onChange={(event) => setRegenerationAngle(event.target.value)}>
@@ -402,15 +454,35 @@ export function DraftEditorClient({ postId }: { postId: string }) {
               </select>
             </label>
             <label>
-              Direction
+              Post length
+              <select value={postLength} onChange={(event) => setPostLength(event.target.value as (typeof postLengths)[number])}>
+                {postLengths.map((item) => (
+                  <option key={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Emoji intensity
+              <select
+                value={emojiIntensity}
+                onChange={(event) => setEmojiIntensity(event.target.value as (typeof emojiIntensities)[number])}
+              >
+                {emojiIntensities.map((item) => (
+                  <option key={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Redraft content
               <textarea
-                placeholder="Example: make this more executive, sharper, and less technical."
-                value={regenerationContext}
-                onChange={(event) => setRegenerationContext(event.target.value)}
+                className="redraft-content"
+                placeholder="Paste or write the content you want turned into a new LinkedIn post."
+                value={redraftContent}
+                onChange={(event) => setRedraftContent(event.target.value)}
               />
             </label>
-            <button type="button" onClick={regenerateDraft} disabled={loading || !body.trim()}>
-              <RefreshCw size={17} /> {loading ? "Working..." : "Generate alternate drafts"}
+            <button type="button" onClick={regenerateDraft} disabled={loading || !redraftContent.trim()}>
+              <RefreshCw size={17} /> {loading ? "Working..." : "Redraft post"}
             </button>
           </div>
 
@@ -420,9 +492,9 @@ export function DraftEditorClient({ postId }: { postId: string }) {
             ) : (
               regeneratedDrafts.map((draft, index) => (
                 <div className="list-item" key={`${draft.hook}-${index}`}>
-                  <div>
+                  <div className="regenerated-draft-preview">
                     <h3>{draft.hook}</h3>
-                    <p>{draft.post_body.slice(0, 240)}</p>
+                    <p className="regenerated-draft-body">{draft.post_body}</p>
                     <p>
                       <strong>First comment:</strong> {draft.first_comment}
                     </p>
@@ -526,6 +598,9 @@ export function DraftEditorClient({ postId }: { postId: string }) {
                   <span className="pill">{image.provider}</span>
                   {image.model ? <span className="pill">{image.model}</span> : null}
                 </div>
+                <button type="button" onClick={() => deleteSavedImage(image.id)} disabled={imageLoading}>
+                  <Trash2 size={17} /> Delete image
+                </button>
               </div>
             ))}
           </div>
@@ -632,4 +707,38 @@ export function DraftEditorClient({ postId }: { postId: string }) {
 
 function buildFinalPostText(input: { hook: string; body: string; hashtags: string }) {
   return [input.hook, input.body, input.hashtags].map((part) => part.trim()).filter(Boolean).join("\n\n");
+}
+
+function isUrl(value: string) {
+  return /^https?:\/\//i.test(value);
+}
+
+function emojiUsageForIntensity(intensity: (typeof emojiIntensities)[number]): EmojiUsage {
+  if (intensity === "None") return "none";
+  if (intensity === "Medium") return "moderate";
+  if (intensity === "Heavy") return "high";
+  return "light";
+}
+
+function postLengthGuidance(length: (typeof postLengths)[number]) {
+  if (length === "Short") {
+    return "Write a concise post of about 75-120 words.";
+  }
+
+  if (length === "Long") {
+    return "Write a fuller post of about 220-320 words with more explanation and supporting detail.";
+  }
+
+  return "Write a medium-length post of about 140-220 words.";
+}
+
+async function readJsonResponse(response: Response) {
+  const text = await response.text();
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text) as { error?: string; ok?: boolean };
+  } catch {
+    return { error: text.slice(0, 240) };
+  }
 }
