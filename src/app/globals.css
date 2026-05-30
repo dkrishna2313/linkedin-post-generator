@@ -269,6 +269,9 @@ textarea {
 }
 
 .notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 12px 14px;
@@ -342,6 +345,18 @@ textarea {
 
 .section-band {
   margin-top: 16px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.section-header h2 {
+  margin-bottom: 0;
 }
 
 .draft-editor-stack {

@@ -46,7 +46,9 @@ export async function GET() {
       }
     });
 
-    return NextResponse.json({ posts });
+    return NextResponse.json({
+      posts: posts.map((post) => ({ ...post, status: normalizePostStatus(post.status) }))
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Posts could not be loaded.", posts: [] }, { status: 500 });
@@ -61,6 +63,7 @@ export async function POST(request: Request) {
   }
 
   const input = parsed.data;
+  const status = normalizePostStatus(input.status);
 
   try {
     await prisma.workspace.upsert({
@@ -72,7 +75,7 @@ export async function POST(request: Request) {
     const post = await prisma.post.create({
       data: {
         workspaceId: defaultWorkspaceId,
-        status: input.status,
+        status,
         title: input.title || input.hook || "Untitled draft",
         body: input.body,
         hook: input.hook || null,
@@ -126,4 +129,8 @@ export async function POST(request: Request) {
     console.error(error);
     return NextResponse.json({ error: "Draft could not be saved." }, { status: 500 });
   }
+}
+
+function normalizePostStatus(status: string) {
+  return status === "edited" ? "draft" : status;
 }

@@ -70,7 +70,7 @@ export const sampleSources = [
   }
 ];
 
-export const draftStatuses = ["idea", "researching", "draft", "edited", "ready_to_post", "published", "archived"];
+export const draftStatuses = ["idea", "researching", "draft", "ready_to_post", "published", "archived"];
 
 export const defaultVoiceProfile = {
   tone: "Direct, practical, executive-friendly, and lightly reflective.",

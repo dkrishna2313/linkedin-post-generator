@@ -29,6 +29,7 @@ type DraftPost = {
   imageIdea: string | null;
   angle: string | null;
   sourceRefs: string[] | null;
+  publishedAt: string | null;
   updatedAt: string;
   versions: Array<{
     id: string;
@@ -45,7 +46,7 @@ type DraftPost = {
   }>;
 };
 
-const draftStatuses = ["idea", "researching", "draft", "edited", "ready_to_post", "published", "archived"];
+const draftStatuses = ["idea", "researching", "draft", "ready_to_post", "published", "archived"];
 const imageStyles = [
   "Abstract business visual",
   "Simple conceptual illustration",
@@ -85,6 +86,7 @@ export function DraftEditorClient({ postId }: { postId: string }) {
   const [imageLoading, setImageLoading] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishMessage, setPublishMessage] = useState("");
+  const [publishedDate, setPublishedDate] = useState(todayDateInputValue());
   const [selectedPublishImageId, setSelectedPublishImageId] = useState("");
   const editorRef = useRef<HTMLDivElement | null>(null);
   const publishImages = post?.images ?? [];
@@ -112,7 +114,8 @@ export function DraftEditorClient({ postId }: { postId: string }) {
       setFirstComment(loaded.firstComment ?? "");
       setImageIdea(loaded.imageIdea ?? "");
       setAngle(loaded.angle ?? "");
-      setStatus(loaded.status);
+      setStatus(normalizePostStatus(loaded.status));
+      setPublishedDate(dateInputValue(loaded.publishedAt) || todayDateInputValue());
       setSelectedPublishImageId(loaded.images[0]?.id ?? "");
     }
 
@@ -216,7 +219,7 @@ export function DraftEditorClient({ postId }: { postId: string }) {
     setFirstComment(draft.first_comment);
     setImageIdea(draft.image_idea);
     setAngle(draft.angle);
-    setStatus("edited");
+    setStatus("draft");
     setEditorHighlighted(true);
     setMessageType("info");
     setMessage("Regenerated draft brought into the editor. Review it above, then click Save changes.");
@@ -355,6 +358,62 @@ export function DraftEditorClient({ postId }: { postId: string }) {
   async function copyFinalPost() {
     await navigator.clipboard.writeText(finalPostText);
     setPublishMessage("Post copied. Paste it into LinkedIn when you are ready.");
+  }
+
+  async function publishDraft() {
+    if (!publishedDate) {
+      setPublishMessage("Add a published date before publishing.");
+      return;
+    }
+
+    setLoading(true);
+    setPublishMessage("Publishing draft...");
+
+    try {
+      const response = await fetch(`/api/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          hook,
+          body,
+          hashtags: hashtags
+            .split(/\s+/)
+            .map((tag) => tag.trim())
+            .filter(Boolean),
+          firstComment,
+          imageIdea,
+          angle,
+          status: "published",
+          publishedAt: new Date(`${publishedDate}T12:00:00`).toISOString(),
+          metadata: { publishedFromDraftEditor: true }
+        })
+      });
+      const data = await readJsonResponse(response);
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Draft could not be published.");
+      }
+
+      setStatus("published");
+      setPost((current) =>
+        current
+          ? {
+              ...current,
+              ...data.post,
+              versions: data.post?.versions ? [...data.post.versions, ...current.versions] : current.versions,
+              images: current.images
+            }
+          : current
+      );
+      setMessageType("success");
+      setMessage(`Draft marked as published for ${publishedDate}.`);
+      setPublishMessage("Published date saved and draft status changed to Published.");
+    } catch (error) {
+      setPublishMessage(error instanceof Error ? error.message : "Draft could not be published.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -650,6 +709,9 @@ export function DraftEditorClient({ postId }: { postId: string }) {
                   <button className="primary" type="button" onClick={copyFinalPost}>
                     <Clipboard size={17} /> Copy post
                   </button>
+                  <button type="button" onClick={publishDraft} disabled={loading || !publishedDate}>
+                    <Send size={17} /> {loading ? "Publishing..." : "Publish"}
+                  </button>
                   {selectedPublishImage ? (
                     <a className="button" href={selectedPublishImage.imagePath} download>
                       <Download size={17} /> Download image
@@ -660,6 +722,10 @@ export function DraftEditorClient({ postId }: { postId: string }) {
                     </button>
                   )}
                 </div>
+                <label>
+                  Published Date
+                  <input type="date" value={publishedDate} onChange={(event) => setPublishedDate(event.target.value)} />
+                </label>
                 {publishMessage ? <p>{publishMessage}</p> : null}
               </div>
 
@@ -713,6 +779,10 @@ function isUrl(value: string) {
   return /^https?:\/\//i.test(value);
 }
 
+function normalizePostStatus(status: string) {
+  return status === "edited" ? "draft" : status;
+}
+
 function emojiUsageForIntensity(intensity: (typeof emojiIntensities)[number]): EmojiUsage {
   if (intensity === "None") return "none";
   if (intensity === "Medium") return "moderate";
@@ -737,8 +807,16 @@ async function readJsonResponse(response: Response) {
   if (!text) return {};
 
   try {
-    return JSON.parse(text) as { error?: string; ok?: boolean };
+    return JSON.parse(text) as { error?: string; ok?: boolean; post?: DraftPost & { versions?: DraftPost["versions"] } };
   } catch {
     return { error: text.slice(0, 240) };
   }
+}
+
+function todayDateInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function dateInputValue(value: string | null) {
+  return value ? new Date(value).toISOString().slice(0, 10) : "";
 }

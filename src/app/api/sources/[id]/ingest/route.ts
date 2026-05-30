@@ -15,7 +15,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   }
 
   try {
-    await prisma.source.update({ where: { id }, data: { status: "fetching", error: null } });
+    await prisma.source.update({ where: { id }, data: { error: null } });
     const ingested = await ingestPublicUrl(source.url);
     const summary = await summarizeSourceContent({
       title: ingested.title ?? source.title,

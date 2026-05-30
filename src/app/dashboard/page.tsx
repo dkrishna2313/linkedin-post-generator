@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { FileInput, Lightbulb, PenLine, Plus } from "lucide-react";
+import { LatestSourcesClient } from "@/components/LatestSourcesClient";
 import { PageHeader } from "@/components/PageHeader";
+import { RecentDraftsClient } from "@/components/RecentDraftsClient";
 import { prisma } from "@/lib/db/prisma";
 
 const defaultWorkspaceId = "default-workspace";
@@ -8,23 +10,33 @@ const defaultWorkspaceId = "default-workspace";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [draftCount, readyCount, sourceCount, recentDrafts, recentSources] = await Promise.all([
+  const [draftCount, readyCount, sourceCount, recentPosts, recentSources] = await Promise.all([
     prisma.post.count({ where: { workspaceId: defaultWorkspaceId, status: { in: ["draft", "edited"] } } }),
     prisma.post.count({ where: { workspaceId: defaultWorkspaceId, status: "ready_to_post" } }),
     prisma.source.count({ where: { workspaceId: defaultWorkspaceId } }),
     prisma.post.findMany({
       where: { workspaceId: defaultWorkspaceId },
       orderBy: { updatedAt: "desc" },
-      take: 5,
-      select: { id: true, title: true, hook: true, body: true, status: true, updatedAt: true }
+      take: 50,
+      select: { id: true, title: true, hook: true, body: true, status: true, updatedAt: true, publishedAt: true }
     }),
     prisma.source.findMany({
       where: { workspaceId: defaultWorkspaceId },
       orderBy: { createdAt: "desc" },
-      take: 3,
+      take: 8,
       select: { id: true, title: true, url: true, summary: true, status: true, tags: true }
     })
   ]);
+  const recentPostsForClient = recentPosts.map((post) => ({
+    ...post,
+    status: post.status === "edited" ? "draft" : post.status,
+    updatedAt: post.updatedAt.toISOString(),
+    publishedAt: post.publishedAt?.toISOString() ?? null
+  }));
+  const recentSourcesForClient = recentSources.map((source) => ({
+    ...source,
+    status: normalizeSourceStatus(source.status)
+  }));
 
   return (
     <div className="page">
@@ -83,52 +95,23 @@ export default async function DashboardPage() {
 
         <div className="card">
           <h2>Recent Drafts</h2>
-          <div className="list">
-            {recentDrafts.length === 0 ? (
-              <p>No saved drafts yet.</p>
-            ) : (
-              recentDrafts.map((post) => (
-                <div className="list-item" key={post.id}>
-                  <div>
-                    <h3>{post.title ?? post.hook ?? "Untitled draft"}</h3>
-                    <p>{post.body.slice(0, 180)}</p>
-                    <Link className="button" href={`/drafts/${post.id}`}>
-                      <PenLine size={17} /> Edit draft
-                    </Link>
-                  </div>
-                  <span className="status">{post.status}</span>
-                </div>
-              ))
-            )}
-          </div>
+          <RecentDraftsClient posts={recentPostsForClient} />
         </div>
       </section>
 
       <section className="card section-band">
-        <h2>Latest Sources</h2>
-        <div className="list">
-          {recentSources.length === 0 ? (
-            <p>No saved sources yet.</p>
-          ) : (
-            recentSources.map((source) => (
-              <div className="list-item" key={source.id}>
-                <div>
-                  <h3>{source.title ?? source.url ?? "Untitled source"}</h3>
-                  <p>{source.summary ?? "No summary yet."}</p>
-                  <div className="pill-row">
-                    {source.tags.map((tag) => (
-                      <span className="pill" key={tag}>
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <span className="status">{source.status}</span>
-              </div>
-            ))
-          )}
+        <div className="section-header">
+          <h2>Latest Sources</h2>
+          <Link className="button" href="/sources">
+            View all sources
+          </Link>
         </div>
+        <LatestSourcesClient sources={recentSourcesForClient} />
       </section>
     </div>
   );
+}
+
+function normalizeSourceStatus(status: string) {
+  return ["queued", "fetching", "embedded"].includes(status) ? "draft" : status;
 }

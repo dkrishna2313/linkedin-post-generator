@@ -15,7 +15,7 @@ const createSourceSchema = z.object({
   content: z.string().trim().optional().default(""),
   summary: z.string().trim().optional().default(""),
   keyThemes: z.string().trim().optional().default(""),
-  status: z.enum(["queued", "draft"]).default("queued")
+  status: z.enum(["draft", "parsed", "summarized", "failed", "archived"]).default("draft")
 });
 
 export async function GET() {
@@ -36,7 +36,7 @@ export async function GET() {
       }
     });
 
-    return NextResponse.json({ sources });
+    return NextResponse.json({ sources: sources.map((source) => ({ ...source, status: normalizeSourceStatus(source.status) })) });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Sources could not be loaded.", sources: [] }, { status: 500 });
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
         cleanContent: cleanContent || null,
         summary: summary || cleanContent.slice(0, 280),
         keyPoints: keyThemes ? { keyThemes } : undefined,
-        status,
+        status: normalizeSourceStatus(status),
         contentHash,
         tags: inferSourceTags(`${type} ${title ?? ""} ${url ?? ""} ${content}`)
       },
@@ -104,3 +104,7 @@ export async function POST(request: Request) {
 }
 
 const inferTitle = inferSourceTitle;
+
+function normalizeSourceStatus(status: string) {
+  return ["queued", "fetching", "embedded"].includes(status) ? "draft" : status;
+}

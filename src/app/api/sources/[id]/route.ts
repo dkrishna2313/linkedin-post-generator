@@ -33,6 +33,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const tags = input.tags ?? inferSourceTags(`${input.type ?? ""} ${input.title ?? ""} ${nextUrl ?? ""} ${nextCleanContent}`);
 
   try {
+    const nextStatus = input.status ? normalizeSourceStatus(input.status) : undefined;
     const source = await prisma.source.update({
       where: { id },
       data: {
@@ -44,7 +45,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         summary: input.summary ?? (input.cleanContent ? input.cleanContent.slice(0, 280) : undefined),
         keyPoints:
           input.keyThemes === undefined ? undefined : input.keyThemes ? { keyThemes: input.keyThemes } : Prisma.JsonNull,
-        status: input.status,
+        status: nextStatus,
         tags,
         contentHash: input.cleanContent
           ? crypto.createHash("sha256").update(`${input.type ?? ""}:${nextUrl ?? ""}:${input.cleanContent}`).digest("hex")
@@ -63,11 +64,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     });
 
-    return NextResponse.json({ source });
+    return NextResponse.json({ source: { ...source, status: normalizeSourceStatus(source.status) } });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Source could not be updated." }, { status: 500 });
   }
+}
+
+function normalizeSourceStatus(status: string) {
+  return ["queued", "fetching", "embedded"].includes(status) ? "draft" : status;
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {

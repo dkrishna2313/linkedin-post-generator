@@ -14,6 +14,7 @@ const updatePostSchema = z.object({
   imageIdea: z.string().trim().optional(),
   angle: z.string().trim().optional(),
   generatedImagePath: z.string().trim().optional(),
+  publishedAt: z.string().datetime().nullable().optional(),
   metadata: z.record(z.unknown()).optional().default({})
 });
 
@@ -35,6 +36,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
           imageIdea: true,
           angle: true,
           sourceRefs: true,
+          publishedAt: true,
           createdAt: true,
           updatedAt: true,
           versions: {
@@ -66,7 +68,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Draft not found." }, { status: 404 });
     }
 
-    return NextResponse.json({ post: { ...post, images } });
+    return NextResponse.json({ post: { ...post, status: normalizePostStatus(post.status), images } });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Draft could not be loaded." }, { status: 500 });
@@ -82,6 +84,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const input = parsed.data;
+  const nextStatus = input.status ? normalizePostStatus(input.status) : undefined;
 
   try {
     const existing = await prisma.post.findUnique({ where: { id }, select: { id: true, body: true } });
@@ -95,7 +98,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const post = await prisma.post.update({
       where: { id },
       data: {
-        status: input.status,
+        status: nextStatus,
         title: input.title,
         body: input.body,
         hook: input.hook,
@@ -103,6 +106,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         firstComment: input.firstComment,
         imageIdea: input.imageIdea,
         angle: input.angle,
+        publishedAt: input.publishedAt === undefined ? undefined : input.publishedAt ? new Date(input.publishedAt) : null,
         versions: {
           create: {
             body: nextBody,
@@ -113,7 +117,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
               firstComment: input.firstComment,
               imageIdea: input.imageIdea,
               angle: input.angle,
-              status: input.status,
+              status: nextStatus,
+              publishedAt: input.publishedAt,
               ...input.metadata
             }
           }
@@ -129,6 +134,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         firstComment: true,
         imageIdea: true,
         angle: true,
+        publishedAt: true,
         updatedAt: true,
         versions: {
           orderBy: { createdAt: "desc" },
@@ -158,4 +164,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     console.error(error);
     return NextResponse.json({ error: "Draft could not be updated." }, { status: 500 });
   }
+}
+
+function normalizePostStatus(status: string) {
+  return status === "edited" ? "draft" : status;
 }

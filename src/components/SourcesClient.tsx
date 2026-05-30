@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, FileText, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, FileText, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 
 type SourceListItem = {
@@ -36,6 +36,7 @@ export function SourcesClient() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [message, setMessage] = useState("");
+  const [summarizeSuccess, setSummarizeSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -46,7 +47,7 @@ export function SourcesClient() {
     cleanContent: "",
     summary: "",
     keyThemes: "",
-    status: "queued",
+    status: "draft",
     tags: ""
   });
 
@@ -73,14 +74,15 @@ export function SourcesClient() {
         keyThemesFromSource(source).toLowerCase().includes(query) ||
         source.cleanContent?.toLowerCase().includes(query) ||
         source.tags.some((tag) => tag.toLowerCase().includes(query));
-      const matchesStatus = statusFilter === "All" || source.status === statusFilter;
+      const matchesStatus = statusFilter === "All" || normalizeSourceStatus(source.status) === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [search, sources, statusFilter]);
 
-  async function saveSource(status: "queued" | "draft") {
+  async function saveSource(status: "draft") {
     setLoading(true);
     setMessage("");
+    setSummarizeSuccess("");
 
     const response = await fetch("/api/sources", {
       method: "POST",
@@ -109,24 +111,26 @@ export function SourcesClient() {
     setSummary("");
     setKeyThemes("");
     setContent("");
-    setMessage(status === "queued" ? "Source queued." : "Source saved as draft.");
+    setMessage("Source saved as draft.");
     await loadSources();
   }
 
   async function submitSource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await saveSource("queued");
+    await saveSource("draft");
   }
 
   async function summarizeNewUrl() {
     const url = extractUrl(newUrl);
     if (!url) {
       setMessage("Enter a valid URL first.");
+      setSummarizeSuccess("");
       return;
     }
 
     setLoading(true);
     setMessage("Summarizing URL...");
+    setSummarizeSuccess("");
 
     const response = await fetch("/api/sources/summarize-url", {
       method: "POST",
@@ -138,6 +142,7 @@ export function SourcesClient() {
 
     if (!response.ok) {
       setMessage(data.error ?? "URL could not be summarized.");
+      setSummarizeSuccess("");
       return;
     }
 
@@ -145,7 +150,8 @@ export function SourcesClient() {
     setNewTitle((current) => current || data.source.title || "");
     setSummary(data.source.summary);
     setKeyThemes(data.source.keyThemes ?? "");
-    setMessage("Summary created. You can edit it before saving the source.");
+    setMessage("");
+    setSummarizeSuccess("Summarization complete. Summary and key themes are ready to review.");
   }
 
   function startEditing(source: SourceListItem) {
@@ -157,10 +163,11 @@ export function SourcesClient() {
       cleanContent: source.cleanContent ?? "",
       summary: source.summary ?? "",
       keyThemes: keyThemesFromSource(source),
-      status: source.status,
+      status: normalizeSourceStatus(source.status),
       tags: source.tags.join(", ")
     });
     setMessage("");
+    setSummarizeSuccess("");
   }
 
   async function updateSource() {
@@ -203,11 +210,13 @@ export function SourcesClient() {
     const url = extractUrl(editDraft.url);
     if (!url) {
       setMessage("Enter a valid URL in the edit form first.");
+      setSummarizeSuccess("");
       return;
     }
 
     setLoading(true);
     setMessage("Summarizing URL...");
+    setSummarizeSuccess("");
 
     const response = await fetch("/api/sources/summarize-url", {
       method: "POST",
@@ -219,6 +228,7 @@ export function SourcesClient() {
 
     if (!response.ok) {
       setMessage(data.error ?? "URL could not be summarized.");
+      setSummarizeSuccess("");
       return;
     }
 
@@ -229,7 +239,8 @@ export function SourcesClient() {
       keyThemes: data.source.keyThemes ?? current.keyThemes,
       status: "summarized"
     }));
-    setMessage("Summary created. Click Save source to persist it.");
+    setMessage("");
+    setSummarizeSuccess("Summarization complete. Click Save source to persist it.");
   }
 
   async function deleteSource(id: string) {
@@ -343,12 +354,17 @@ export function SourcesClient() {
           </label>
           <div className="toolbar">
             <button className="primary" type="submit" disabled={loading}>
-              {loading ? "Saving..." : "Queue source"}
+              {loading ? "Saving..." : "Save source"}
             </button>
             <button type="button" disabled={loading} onClick={() => saveSource("draft")}>
               Save as draft
             </button>
           </div>
+          {summarizeSuccess ? (
+            <div className="notice success">
+              <CheckCircle2 size={18} /> {summarizeSuccess}
+            </div>
+          ) : null}
           {message ? <p>{message}</p> : null}
         </form>
 
@@ -372,10 +388,8 @@ export function SourcesClient() {
               <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option>All</option>
                 <option>draft</option>
-                <option>queued</option>
                 <option>parsed</option>
                 <option>summarized</option>
-                <option>embedded</option>
                 <option>failed</option>
               </select>
             </label>
@@ -467,11 +481,8 @@ export function SourcesClient() {
                         onChange={(event) => setEditDraft((current) => ({ ...current, status: event.target.value }))}
                       >
                         <option>draft</option>
-                        <option>queued</option>
-                        <option>fetching</option>
                         <option>parsed</option>
                         <option>summarized</option>
-                        <option>embedded</option>
                         <option>failed</option>
                         <option>archived</option>
                       </select>
@@ -512,7 +523,9 @@ export function SourcesClient() {
                       </div>
                     </div>
                     <div className="toolbar">
-                      <span className={source.status === "draft" ? "status warn" : "status"}>{source.status}</span>
+                      <span className={normalizeSourceStatus(source.status) === "draft" ? "status warn" : "status"}>
+                        {normalizeSourceStatus(source.status)}
+                      </span>
                       {hasDetails ? (
                         <button
                           className="icon"
@@ -573,4 +586,8 @@ function keyThemesFromSource(source: SourceListItem) {
   }
 
   return "";
+}
+
+function normalizeSourceStatus(status: string) {
+  return ["queued", "fetching", "embedded"].includes(status) ? "draft" : status;
 }
