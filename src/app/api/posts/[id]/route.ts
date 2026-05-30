@@ -166,6 +166,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  try {
+    await prisma.post.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Draft could not be deleted." }, { status: 500 });
+  }
+}
+
 function normalizePostStatus(status: string) {
   return status === "edited" ? "draft" : status;
 }

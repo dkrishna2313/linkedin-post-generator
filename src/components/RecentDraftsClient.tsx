@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { PenLine } from "lucide-react";
+import { PenLine, Trash2 } from "lucide-react";
 
 type RecentPost = {
   id: string;
@@ -18,8 +18,22 @@ const statusOptions = ["draft", "ready_to_post", "published", "archived", "idea"
 
 export function RecentDraftsClient({ posts }: { posts: RecentPost[] }) {
   const [statusFilter, setStatusFilter] = useState("draft");
-  const normalizedPosts = posts.map((post) => ({ ...post, status: normalizePostStatus(post.status) }));
+  const [localPosts, setLocalPosts] = useState(posts);
+  const normalizedPosts = localPosts.map((post) => ({ ...post, status: normalizePostStatus(post.status) }));
   const filteredPosts = normalizedPosts.filter((post) => post.status === statusFilter);
+
+  async function deleteDraft(id: string) {
+    const confirmed = window.confirm("Delete this draft? This cannot be undone.");
+    if (!confirmed) return;
+
+    const response = await fetch(`/api/posts/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      window.alert("Draft could not be deleted.");
+      return;
+    }
+
+    setLocalPosts((current) => current.filter((post) => post.id !== id));
+  }
 
   return (
     <div className="grid">
@@ -46,6 +60,9 @@ export function RecentDraftsClient({ posts }: { posts: RecentPost[] }) {
                 <Link className="button" href={`/drafts/${post.id}`}>
                   <PenLine size={17} /> Edit draft
                 </Link>
+                <button type="button" onClick={() => deleteDraft(post.id)}>
+                  <Trash2 size={17} /> Delete draft
+                </button>
               </div>
               <span className="status">{post.status}</span>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -60,6 +61,7 @@ const postLengths = ["Short", "Medium", "Long"] as const;
 const emojiIntensities = ["None", "Light", "Medium", "Heavy"] as const;
 
 export function DraftEditorClient({ postId }: { postId: string }) {
+  const router = useRouter();
   const [post, setPost] = useState<DraftPost | null>(null);
   const [title, setTitle] = useState("");
   const [hook, setHook] = useState("");
@@ -166,6 +168,27 @@ export function DraftEditorClient({ postId }: { postId: string }) {
     );
     setMessageType("success");
     setMessage(`Changes saved at ${new Date().toLocaleTimeString()}. Status: ${data.post.status}.`);
+  }
+
+  async function deleteDraft() {
+    const confirmed = window.confirm("Delete this draft? This cannot be undone.");
+    if (!confirmed) return;
+
+    setLoading(true);
+    setMessageType("info");
+    setMessage("Deleting draft...");
+
+    const response = await fetch(`/api/posts/${postId}`, { method: "DELETE" });
+    const data = await readJsonResponse(response);
+
+    if (!response.ok) {
+      setLoading(false);
+      setMessageType("error");
+      setMessage(data.error ?? "Draft could not be deleted.");
+      return;
+    }
+
+    router.push("/dashboard");
   }
 
   async function regenerateDraft() {
@@ -429,6 +452,9 @@ export function DraftEditorClient({ postId }: { postId: string }) {
             </Link>
             <button type="button" onClick={() => setPublishOpen(true)} disabled={!body.trim()}>
               <Send size={17} /> Publish
+            </button>
+            <button type="button" onClick={deleteDraft} disabled={loading}>
+              <Trash2 size={17} /> Delete draft
             </button>
             <button className="primary" onClick={saveChanges} disabled={loading || !body.trim()}>
               <Save size={17} /> {loading ? "Saving..." : "Save changes"}
